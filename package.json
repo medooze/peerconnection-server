@@ -1,0 +1,20 @@
+{
+  "name": "peerconnection-server-test",
+  "version": "1.0.0",
+  "description": "Echo test server for libwebrtc peerconnection_client",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/medooze/peerconnection-server.git"
+  },
+  "author": "Sergio Garcia Murillo",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/medooze/peerconnection-server/issues"
+  },
+  "homepage": "https://github.com/medooze/peerconnection-server",
+  "dependencies": {
+    "medooze-media-server": "^0.16.0",
+    "semantic-sdp": "^2.4.0"
+  }
+}
