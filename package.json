@@ -14,7 +14,7 @@
   },
   "homepage": "https://github.com/medooze/peerconnection-server",
   "dependencies": {
-    "medooze-media-server": "^0.16.0",
-    "semantic-sdp": "^2.4.0"
+    "medooze-media-server": "^0",
+    "semantic-sdp": "^3"
   }
 }
