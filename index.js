@@ -28,10 +28,39 @@ const endpoint = MediaServer.createEndpoint(ip);
 const base = 'www';
 
 //Enable debug
-MediaServer.enableDebug(true);
-MediaServer.enableUltraDebug(true);
+MediaServer.enableDebug(false);
+MediaServer.enableUltraDebug(false);
+
+const Capabilities = {
+	audio : {
+		codecs		: ["opus"],
+	},
+	video : {
+		codecs		: ["AV1"],
+		rtx		: true,
+		rtcpfbs		: [
+			{ "id": "goog-remb"},
+			{ "id": "transport-cc"},
+			{ "id": "ccm", "params": ["fir"]},
+			{ "id": "nack"},
+			{ "id": "nack", "params": ["pli"]}
+			
+		],
+		extensions	: [
+			"urn:3gpp:video-orientation",
+			"http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01",
+			"http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time",
+			"urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-stream-id",
+			"urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id",
+			"urn:ietf:params:rtp-hdrext:sdes:mid"
+		],
+		simulcast	: true
+	}
+};
 
 var waiting;
+let recorder;
+
 //Create HTTP server
 const httpserver = http.createServer ((req, res) => {
 	// parse URL
@@ -42,7 +71,7 @@ const httpserver = http.createServer ((req, res) => {
 	switch(parsedUrl.pathname)
 	{
 		case "/sign_in":
-			const peers = "perc-server,1,1\n";
+			const peers = "demo-server,1,1\n";
 			res.setHeader ('Pragma','2');
 			res.setHeader ('Content-Type','text/plain');
 			res.setHeader ('Content-Length',peers.length);
@@ -56,8 +85,13 @@ const httpserver = http.createServer ((req, res) => {
 			}).on('data', function(chunk) {
 				body.push(chunk);
 			}).on('end', function() {
+				//Get body
+				const str = Buffer.concat(body).toString();
+				//Check if end
+				if (str=="BYE")
+					return //recorder.stop();
 				//Get string message
-				var msg = JSON.parse(Buffer.concat(body).toString());
+				var msg = JSON.parse(str);
 			
 				//If it is the offer
 				if (msg.type==="offer")
@@ -74,81 +108,33 @@ const httpserver = http.createServer ((req, res) => {
 						ice  : offer.getICE() 
 					});
 					
+					const ts = Date.now();
+					
 					//Enebla dumps
-					transport.dump("dumps/"+(new Date()) +".pcap");
+					transport.dump("dumps/" + ts +".pcap");
+					
+					//Create recoreder
+					//recorder = MediaServer.createRecorder("dumps/"+ ts +".mp4");
 
 					//Set RTP remote properties
 					transport.setRemoteProperties({
 						audio : offer.getMedia("audio"),
 						video : offer.getMedia("video")
 					});
-
-					//Get local DTLS and ICE info
-					const dtls = transport.getLocalDTLSInfo();
-					const ice  = transport.getLocalICEInfo();
-
-					//Get local candidates
-					const candidates = endpoint.getLocalCandidates();
-
+					
 					//Create local SDP info
-					let answer = new SDPInfo();
-					
-					//Add ice and dtls info
-					answer.setDTLS(dtls);
-					answer.setICE(ice);
-					//Add candidates to media info
-					answer.addCandidates(candidates);
-					
-					//Get remote video m-line info 
-					let audioOffer = offer.getMedia("audio");
-
-					//If offer had video
-					if (audioOffer)
-					{
-						//Create video media
-						let  audio = new MediaInfo(audioOffer.getId(), "audio");
-						
-						//Get codec types
-						let opus = audioOffer.getCodec("opus");
-						//Add video codecs
-						audio.addCodec(opus);
-						//Set recv only
-						audio.setDirection(Direction.SENDRECV);
-						//Add it to answer
-						answer.addMedia(audio);
-					}
-
-					//Get remote video m-line info 
-					let videoOffer = offer.getMedia("video");
-
-					//If offer had video
-					if (videoOffer)
-					{
-						//Create video media
-						let  video = new MediaInfo(videoOffer.getId(), "video");
-						
-						//Get codec types
-						let vp8 = videoOffer.getCodec("vp8");
-						//Add video codecs
-						video.addCodec(vp8);
-						//Limit incoming bitrate
-						video.setBitrate(1024);
-
-						//Add video extensions
-						for (let [id, uri] of videoOffer.getExtensions().entries())
-							//Add it
-							video.addExtension(id, uri);
-
-						//Add it to answer
-						answer.addMedia(video);
-					}
+					const answer = offer.answer({
+						dtls		: transport.getLocalDTLSInfo(),
+						ice		: transport.getLocalICEInfo(),
+						candidates	: endpoint.getLocalCandidates(),
+						capabilities	: Capabilities
+					});
 
 					//Set RTP local  properties
 					transport.setLocalProperties({
 						audio : answer.getMedia("audio"),
 						video : answer.getMedia("video")
 					});
-
 
 					//For each stream offered
 					for (let offered of offer.getStreams().values())
@@ -171,7 +157,10 @@ const httpserver = http.createServer ((req, res) => {
 						//Add local stream info it to the answer
 						answer.addStream(info);
 						
+						//Record it
+						//recorder.record(incomingStream);
 					}
+					
 					const str = answer.toString ();
 					console.log("ANSWER:\n",str);
 					
@@ -197,6 +186,9 @@ const httpserver = http.createServer ((req, res) => {
 			break;
 		case "/wait":
 			waiting = res;
+			break;
+		case "/sign_out":
+			//recorder.stop();
 			break;
 	}
 }).listen (8888);
